@@ -6,6 +6,15 @@
         <p class="page-desc">{{ meta.desc }}</p>
       </div>
       <div class="page-actions">
+        <button
+          v-if="meta.key === 'msg_decode'"
+          class="btn"
+          type="button"
+          data-testid="open-batch-receipt"
+          @click="scrollToBatch"
+        >
+          批次受理回执
+        </button>
         <button class="btn primary" data-testid="open-create" type="button" @click="openCreate">
           登记{{ meta.entity }}
         </button>
@@ -14,6 +23,8 @@
         </button>
       </div>
     </header>
+
+    <BatchReceiptPanel v-if="meta.key === 'msg_decode'" />
 
     <div class="stat-row">
       <article v-for="item in stats" :key="item.label" class="stat-card">
@@ -46,7 +57,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in rows" :key="String(row.id)" :data-testid="`row-${row.id}`" :data-status="String(row.status)">
+        <tr v-for="row in rows" :key="String(row.id)" :data-testid="meta.key === 'msg_decode' ? `decode-rule-row-${row.id}` : `row-${row.id}`" :data-status="String(row.status)">
           <td v-for="column in meta.fields" :key="column">{{ row[column] ?? '—' }}</td>
           <td>{{ row.status }}</td>
           <td class="row-actions">
@@ -104,9 +115,14 @@ import {
   runAction as applyAction,
 } from '@/api/backend-service'
 import type { EntryRow } from '@/data/types'
+import BatchReceiptPanel from '@/components/BatchReceiptPanel.vue'
 
 const props = defineProps<{ moduleKey: string }>()
 const meta = moduleMeta(props.moduleKey)
+
+function scrollToBatch() {
+  document.getElementById('batch-receipt')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')

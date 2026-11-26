@@ -187,12 +187,39 @@ class CrossModuleService:
             "raw_message": raw_message,
             "route_time": _now(),
         }
-
         return {
             "ok": True,
             "message": f"报文已解码并路由到 {target_topic}",
             "result": result_entry,
         }
+
+    # ========================
+    # Flow 2+: 混合报文批次受理回执（逐行协议/校验、幂等送达、断线找回）
+    # ========================
+
+    def submit_batch_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.submit_batch_receipt(*args, **kwargs)
+
+    def batch_decode_and_route(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.batch_decode_and_route(*args, **kwargs)
+
+    def register_batch_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.register_batch_receipt(*args, **kwargs)
+
+    def resubmit_batch_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.resubmit_receipt(*args, **kwargs)
+
+    def get_batch_receipt(self, receipt_no: str) -> dict[str, Any] | None:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.get_receipt(receipt_no)
+
+    def list_batch_deliveries(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.list_deliveries(*args, **kwargs)
 
     # ========================
     # Flow 3: ts_point + ts_store → 时序测点与存储策略

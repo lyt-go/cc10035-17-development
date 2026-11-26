@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import ROUTERS
+from app.routers import ROUTER_OBJECTS
 from app.store import store
 
 app = FastAPI(title="IoT设备数据接入与协议适配平台", version="1.0.0")
@@ -35,6 +35,7 @@ def overview() -> dict[str, object]:
 
 
 # 资源路由含 /api/{module}，必须放在 health / overview 之后注册，
-# 否则固定路径会被动态路径抢先匹配。
-for module in ROUTERS:
-    app.include_router(module.router)
+# 否则固定路径会被动态路径抢先匹配。ROUTER_OBJECTS 内部已安排好
+# “批次固定路径 → 通用资源 → 批次兜底”的先后顺序。
+for router in ROUTER_OBJECTS:
+    app.include_router(router)

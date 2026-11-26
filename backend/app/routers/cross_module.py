@@ -1,7 +1,7 @@
 """跨模块数据流统一接口：暴露9组数据流的操作端点。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.services.cross_module import cross_service
 
@@ -29,12 +29,40 @@ def flow1_device_protocol_status(device_id: str | None = None):
 # ==================== Flow 2: 报文解码与消息路由 ====================
 
 @router.post("/flow2/decode-route")
-def flow2_decode_and_route(
-    raw_message: str = Query(..., description="原始报文内容"),
-    protocol_type: str = Query(..., description="协议类型"),
-    topic: str = Query(..., description="源Topic"),
+async def flow2_decode_and_route(
+    request: Request,
+    raw_message: str | None = Query(default=None, description="原始报文内容"),
+    protocol_type: str | None = Query(default=None, description="协议类型"),
+    topic: str | None = Query(default=None, description="源Topic"),
 ):
-    """报文解码后按路由规则分发到目标Topic。"""
+    """报文解码后按路由规则分发到目标Topic。
+
+    同时兼容两种用法：
+    * 旧的单报文 query 参数方式；
+    * 混合报文批次 JSON（含 rows/lines/messages），转交批次受理回执服务。
+    """
+    # 优先识别 JSON 批次体。
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+    if isinstance(data, list):
+        data = {"rows": data}
+    if isinstance(data, dict) and (data.get("rows") or data.get("lines") or data.get("messages")):
+        from app.services.batch_receipt import batch_receipt_service
+        from app.routers.batch_receipt import _submit_response
+        payload = dict(data)
+        if raw_message:
+            payload.setdefault("raw_message", raw_message)
+        return _submit_response(payload)
+
+    # 单报文：query 参数优先，缺失时回退到 JSON 字段。
+    if not raw_message and isinstance(data, dict):
+        raw_message = data.get("raw_message") or data.get("message")
+        protocol_type = protocol_type or data.get("protocol_type") or data.get("protocol")
+        topic = topic or data.get("topic") or data.get("source_topic")
+    if not raw_message or not protocol_type or not topic:
+        raise HTTPException(status_code=422, detail="raw_message/protocol_type/topic 不能为空，或提交包含 rows 的批次体")
     return cross_service.decode_and_route(raw_message, protocol_type, topic)
 
 

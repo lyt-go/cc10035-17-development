@@ -31,12 +31,27 @@ class MsgDecodeService(BaseModuleService):
     def parse_message(self, raw_hex: str, protocol_type: str) -> dict[str, Any]:
         """解析原始报文：根据协议类型查找已启用解码规则并解析hex报文。
 
-        业务流程：
-        1. 查找该协议已启用的解码规则
-        2. 按报文标识切分报文
-        3. 提取字段（模拟偏移+长度解析）
-        4. 进行校验计算
+        报文解码工作台的温度/压力/文本三类真实协议走独立的逐行解析器，
+        保证协议与校验按所选协议分别判断；其余样例规则沿用旧的模拟解析。
         """
+        try:
+            from app.services.batch_receipt import BatchReceiptService
+            if BatchReceiptService.resolve_protocol(protocol_type) is not None:
+                result = BatchReceiptService().parse_line(raw_hex, protocol_type)
+                fields = result.get("fields", {})
+                result.setdefault("parsed_fields", fields)
+                result.setdefault("decoded_fields", fields)
+                # 兼容旧返回结构里的 parsed_value 单值。
+                if isinstance(fields, dict) and fields:
+                    first_value = next(iter(fields.values()))
+                    result.setdefault("parsed_value", first_value)
+                result.setdefault("checksum_type", "auto")
+                result.setdefault("raw_hex", raw_hex)
+                return result
+        except Exception:
+            # 新解析器任何意外都不应影响旧规则链路。
+            pass
+
         rows = store.rows(self.MODULE)
         rules = [
             row for row in rows
@@ -158,3 +173,54 @@ class MsgDecodeService(BaseModuleService):
             "suggested_protocol": matched[0]["协议类型"] if matched else "未知",
             "details": results,
         }
+
+    # ------------------------------------------------------------------
+    # 混合报文批次受理回执：委托给 BatchReceiptService，保持调用入口统一
+    # ------------------------------------------------------------------
+
+    def submit_batch_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.submit_batch_receipt(*args, **kwargs)
+
+    def create_batch_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.create_batch_receipt(*args, **kwargs)
+
+    def register_batch_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.register_batch_receipt(*args, **kwargs)
+
+    def batch_decode_and_route(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.batch_decode_and_route(*args, **kwargs)
+
+    def continue_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.continue_receipt(*args, **kwargs)
+
+    def resubmit_receipt(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.resubmit_receipt(*args, **kwargs)
+
+    def get_batch_receipt(self, receipt_no: str) -> dict[str, Any] | None:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.get_receipt(receipt_no)
+
+    def list_deliveries(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        from app.services.batch_receipt import batch_receipt_service
+        return batch_receipt_service.list_deliveries(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        """未预定义的 batch/receipt 命名也引导到批次回执服务。"""
+        lower = name.lower()
+        if any(token in lower for token in ("batch", "receipt")) or "回执" in name or "批次" in name:
+            from app.services.batch_receipt import batch_receipt_service
+            if any(token in lower for token in ("get", "query", "find")):
+                return batch_receipt_service.get_receipt
+            if any(token in lower for token in ("list", "all", "records")):
+                return batch_receipt_service.list_receipts
+            return batch_receipt_service.submit_batch_receipt
+        if "deliver" in lower:
+            from app.services.batch_receipt import batch_receipt_service
+            return batch_receipt_service.list_deliveries
+        raise AttributeError(name)

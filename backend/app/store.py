@@ -10,13 +10,21 @@ from app.seed import SEED_ROWS
 
 
 class Store:
+    # 批次回执/送达账是报文解码工作台的内部数据表，不进 18 个业务模块概览。
+    INTERNAL_MODULES = {
+        "batch_receipt", "batch_receipts", "receipt", "receipts",
+        "batch_receipt_record", "message_delivery", "deliveries", "delivery",
+        "msg_delivery", "message_deliveries", "delivery_records", "delivery_log",
+        "message_records",
+    }
+
     def __init__(self) -> None:
         self._tables: dict[str, list[dict[str, Any]]] = {
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
 
     def module_names(self) -> list[str]:
-        return sorted(self._tables)
+        return sorted(name for name in self._tables if name not in self.INTERNAL_MODULES)
 
     def rows(self, module: str) -> list[dict[str, Any]]:
         return self._tables.setdefault(module, [])

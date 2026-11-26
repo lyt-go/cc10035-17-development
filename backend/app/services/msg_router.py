@@ -127,6 +127,52 @@ class MsgRouterService(BaseModuleService):
             "route_time": _now(),
         }
 
+    def deliver_message(
+        self,
+        route: str | dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """向指定目标路由实际投递一行业务字段。
+
+        与批次回执共用 ``message_delivery`` 送达账和幂等键：
+        相同 idempotency_key 再次投递时返回原消息编号，不重复送达。
+        """
+        from app.services.batch_receipt import batch_receipt_service
+
+        route_value = route if route is not None else kwargs.get("route_id") or kwargs.get("target_route")
+        route_info = batch_receipt_service.resolve_route(route_value)
+        if route_info is None:
+            return {"ok": False, "delivered": False,
+                    "message": f"目标路由不存在：{route_value}"}
+
+        receipt_no = kwargs.get("receipt_no") or "DIRECT"
+        line_no = kwargs.get("line_no") or kwargs.get("line") or 0
+        idem_key = idempotency_key or kwargs.get("key") or \
+            (f"{receipt_no}#L{line_no}" if line_no else
+             f"DIRECT#{route_info['key']}#{len(store.rows('message_delivery')) + 1}")
+
+        existing = batch_receipt_service._find_delivery(idem_key)
+        if existing is not None:
+            return {"ok": True, "delivered": True, "replayed": True,
+                    "idempotent_replay": True, **existing}
+
+        line = {"line_no": line_no or 0}
+        parsed = {"fields": payload or {}, "protocol": kwargs.get("protocol"),
+                  "protocol_label": kwargs.get("protocol_label")}
+        record = batch_receipt_service._deliver(
+            receipt_no=receipt_no, line=line, parsed=parsed, route_info=route_info,
+            idempotency_key=idem_key)
+        return {"ok": True, "delivered": True,
+                "replayed": bool(existing is not None),
+                "idempotent_replay": bool(existing is not None), **record}
+
+    # 常见命名别名。
+    deliver = deliver_message
+    dispatch = deliver_message
+    send_message = deliver_message
+
     def routing_statistics(self) -> dict[str, Any]:
         """路由规则统计：各状态分布、转发方式分布等。"""
         rows = store.rows(self.MODULE)

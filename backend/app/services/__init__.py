@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.services.base import BaseModuleService
+from app.services.batch_receipt import BatchReceiptService, batch_receipt_service
 from app.services.device_registry import DeviceRegistryService
 from app.services.protocol_cfg import ProtocolCfgService
 from app.services.msg_decode import MsgDecodeService
@@ -22,6 +23,7 @@ from app.services.data_stream import DataStreamService
 from app.services.aggregate_sink import AggregateSinkService
 
 SERVICES: dict[str, BaseModuleService] = {
+    "batch_receipt": batch_receipt_service,
     "device_registry": DeviceRegistryService(),
     "protocol_cfg": ProtocolCfgService(),
     "msg_decode": MsgDecodeService(),
